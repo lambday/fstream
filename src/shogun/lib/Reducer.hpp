@@ -77,24 +77,26 @@ struct num_elements<std::tuple<A...>>
 	enum { value = std::tuple_size<std::tuple<A...>>::value };
 };
 
-template <class R, class V, size_t TotalNumReducers, size_t CurrentNumReducer>
-struct accumulate_all : accumulate_all<R,V,TotalNumReducers,CurrentNumReducer-1>
+template <class R, class V, size_t N, size_t I>
+struct accumulate_all : accumulate_all<R,V,N,I-1>
 {
 	typedef typename R::unitary_type U;
-	explicit accumulate_all(R& r, V& value, U& accumulated)
-	: accumulate_all<R,V,TotalNumReducers,CurrentNumReducer-1>(r, value, accumulated)
+	typedef typename R::accumulator_type A;
+	explicit accumulate_all(U& accumulated, const A& accumulator, const V& value)
+	: accumulate_all<R,V,N,I-1>(accumulated, accumulator, value)
 	{
-		std::get<CurrentNumReducer-1>(accumulated) = std::get<CurrentNumReducer-1>(r.accumulate)(std::get<CurrentNumReducer-1>(accumulated), value);
+		std::get<I-1>(accumulated) = std::get<I-1>(accumulator)(std::get<I-1>(accumulated), value);
 	}
 };
 
-template <class R, class V, size_t TotalNumReducers>
-struct accumulate_all<R,V,TotalNumReducers,1>
+template <class R, class V, size_t N>
+struct accumulate_all<R,V,N,1>
 {
 	typedef typename R::unitary_type U;
-	explicit accumulate_all(R& r, V& value, U& accumulated)
+	typedef typename R::accumulator_type A;
+	explicit accumulate_all(U& accumulated, const A& accumulator, const V& value)
 	{
-		std::get<0>(accumulated) = std::get<0>(r.accumulate)(std::get<0>(accumulated), value);
+		std::get<0>(accumulated) = std::get<0>(accumulator)(std::get<0>(accumulated), value);
 	}
 };
 
@@ -102,18 +104,20 @@ template <class R, class V>
 struct accumulate_all<R,V,1,1>
 {
 	typedef typename R::unitary_type U;
-	explicit accumulate_all(R& r, V& value, U& accumulated)
+	typedef typename R::accumulator_type A;
+	explicit accumulate_all(U& accumulated, const A& accumulator, const V& value)
 	{
-		accumulated = r.accumulate(accumulated, value);
+		accumulated = accumulator(accumulated, value);
 	}
 };
 
 template <class R, class V>
-struct accumulator : accumulate_all<R,V,R::num_reducers,R::num_reducers>
+struct accumulate : accumulate_all<R,V,R::num_tasks,R::num_tasks>
 {
 	typedef typename R::unitary_type U;
-	explicit accumulator(R& r, V& value, U& accumulated)
-	: accumulate_all<R,V,R::num_reducers,R::num_reducers>(r, value, accumulated)
+	typedef typename R::accumulator_type A;
+	explicit accumulate(U& accumulated, const A& accumulator, const V& value)
+	: accumulate_all<R,V,R::num_tasks,R::num_tasks>(accumulated, accumulator, value)
 	{
 	}
 };
@@ -122,46 +126,53 @@ template <class U, class A, size_t N>
 struct Reducer
 {
 	using unitary_type = U;
-	using accumulate_type = A;
-	static constexpr size_t num_reducers = N;
+	using accumulator_type = A;
 	using type = Reducer<U,A,N>;
-	Reducer(const U& _unitary, A&& _accumulate) : unitary(_unitary), accumulate(std::forward<A>(_accumulate))
+	static constexpr size_t num_tasks = N;
+
+	Reducer(const U& _unitary, const A& _accumulator) : unitary(_unitary), accumulator(_accumulator)
 	{
 	}
+
 	Reducer(const Reducer& other) = default;
 	Reducer& operator=(const Reducer& other) = default;
+	~Reducer() = default;
+
+	template <class C>
+	U reduce(C const * const c) const
+	{
+		return reduce(c->begin(), c->end(), unitary);
+	}
+
 	template <class It>
-	U reduce(It current, It end, U accumulated)
+	U reduce(It current, It end, U accumulated) const
 	{
 		typedef typename It::value_type V;
 		if (current == end)
 			return accumulated;
-		accumulator<type,V>(*this, *current, accumulated);
+		accumulate<type,V>(accumulated, accumulator, *current);
 		return reduce(++current, end, accumulated);
 	}
-	template <class C>
-	U reduce(C const * const c)
-	{
-		return reduce(c->begin(), c->end(), unitary);
-	}
-	U unitary;
-	A accumulate;
+
+
+	const U unitary;
+	const A accumulator;
 };
 
 template <class U, class A>
-auto custom(U&& unitary, A&& accumulate) -> Reducer<U,A,num_elements<A>::value>
+auto custom(const U& unitary, const A& accumulator) -> Reducer<U,A,num_elements<A>::value>
 {
-	return Reducer<U,A,num_elements<A>::value>(unitary, std::forward<A>(accumulate));
+	return Reducer<U,A,num_elements<A>::value>(unitary, accumulator);
 }
 
 template <typename T>
 struct Accumulators
 {
-	struct sum { T operator()(T& r, T& v) { return r+v; }};
-	struct prod { T operator()(T& r, T& v) { return r*v; }};
+	struct sum { T& operator()(T& r, const T& v) const { r+=v; return r; }};
+	struct prod { T& operator()(T& r, const T& v) const { r*=v; return r; }};
 	struct double_mean
 	{
-		std::pair<double,size_t> operator()(std::pair<double,size_t> r, T& v)
+		std::pair<double,size_t>& operator()(std::pair<double,size_t>& r, const T& v) const
 		{
 			auto delta = v - r.first;
 			r.first += delta/r.second++;

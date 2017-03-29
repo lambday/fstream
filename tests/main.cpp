@@ -72,9 +72,9 @@ int main()
 	cout << "sum,prod,mean = " << get<0>(ots_m2) << ","	<< get<1>(ots_m2) << "," << get<2>(ots_m2).first << endl;
 
 	// custom and complex reductions
-	auto reducer1 = custom(0, [](int r, int v) { return r+v; });
-	auto reducer2 = custom(1, [](int r, int v) { return r*v; });
-	auto reducer3 = custom(make_pair(0.0,1ul), [](pair<double,size_t> r, int v)
+	auto reducer1 = custom(0, [](int r, const int& v) { return r+v; });
+	auto reducer2 = custom(1, [](int r, const int& v) { return r*v; });
+	auto reducer3 = custom(make_pair(0.0,1ul), [](pair<double,size_t> r, const int& v)
 			{
 				auto delta = v - r.first;
 				r.first += delta/r.second++;

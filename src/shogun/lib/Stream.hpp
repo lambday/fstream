@@ -53,19 +53,19 @@ struct Stream
 {
 	Stream(C const * const _c) : c(_c) {}
 	template <class R>
-	auto reduce(R r) -> typename R::unitary_type
+	auto reduce(const R& r) -> typename R::unitary_type
 	{
 		return r.reduce(c);
 	}
 	template <class R1, class R2>
-	auto reduce(R1 r1, R2 r2) -> std::pair<typename R1::unitary_type,typename R2::unitary_type>
+	auto reduce(const R1& r1, const R2& r2) -> std::pair<typename R1::unitary_type,typename R2::unitary_type>
 	{
-		return custom(std::make_pair(r1.unitary, r2.unitary), std::make_pair(r1.accumulate, r2.accumulate)).reduce(c);
+		return custom(std::make_pair(r1.unitary, r2.unitary), std::make_pair(r1.accumulator, r2.accumulator)).reduce(c);
 	}
 	template <class...Rs>
-	auto reduce(Rs...rs) -> std::tuple<typename Rs::unitary_type...>
+	auto reduce(const Rs&...rs) -> std::tuple<typename Rs::unitary_type...>
 	{
-		return custom(std::make_tuple(rs.unitary...), std::make_tuple(rs.accumulate...)).reduce(c);
+		return custom(std::make_tuple(rs.unitary...), std::make_tuple(rs.accumulator...)).reduce(c);
 	}
 	auto sum() -> typename C::value_type
 	{
