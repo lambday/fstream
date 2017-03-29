@@ -145,15 +145,15 @@ struct Reducer
 	}
 
 	template <class It>
-	U reduce(It current, It end, U accumulated) const
+	U reduce(It begin, It end, U accumulated) const
 	{
 		typedef typename It::value_type V;
-		if (current == end)
-			return accumulated;
-		accumulate<type,V>(accumulated, accumulator, *current);
-		return reduce(++current, end, accumulated);
+		for (auto it = begin; it != end; ++it)
+		{
+			accumulate<type,V>(accumulated, accumulator, *it);
+		}
+		return accumulated;
 	}
-
 
 	const U unitary;
 	const A accumulator;
