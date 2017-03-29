@@ -40,6 +40,7 @@
 #include <memory>
 #include <initializer_list>
 #include <utility>
+#include <typeinfo>
 
 namespace std
 {
@@ -124,10 +125,11 @@ struct Reducer
 	using accumulate_type = A;
 	static constexpr size_t num_reducers = N;
 	using type = Reducer<U,A,N>;
-	Reducer(const U& _unitary, A&& _accumulate)
-		: unitary(_unitary), accumulate(std::forward<A>(_accumulate))
+	Reducer(const U& _unitary, A&& _accumulate) : unitary(_unitary), accumulate(std::forward<A>(_accumulate))
 	{
 	}
+	Reducer(const Reducer& other) = default;
+	Reducer& operator=(const Reducer& other) = default;
 	template <class It>
 	U reduce(It current, It end, U accumulated)
 	{
@@ -151,6 +153,43 @@ auto custom(U&& unitary, A&& accumulate) -> Reducer<U,A,num_elements<A>::value>
 {
 	return Reducer<U,A,num_elements<A>::value>(unitary, std::forward<A>(accumulate));
 }
+
+template <typename T>
+struct Accumulators
+{
+	struct sum { T operator()(T& r, T& v) { return r+v; }};
+	struct prod { T operator()(T& r, T& v) { return r*v; }};
+	struct double_mean
+	{
+		std::pair<double,size_t> operator()(std::pair<double,size_t> r, T& v)
+		{
+			auto delta = v - r.first;
+			r.first += delta/r.second++;
+			return r;
+		};
+	};
+};
+
+template <typename U>
+struct sum : Reducer<U,typename Accumulators<U>::sum,1>
+{
+	using A = typename Accumulators<U>::sum;
+	sum() : Reducer<U,A,1>(0, A()) {}
+};
+
+template <typename U>
+struct prod : Reducer<U,typename Accumulators<U>::prod,1>
+{
+	using A = typename Accumulators<U>::prod;
+	prod() : Reducer<U,A,1>(1, A()) {}
+};
+
+template <typename U>
+struct double_mean : Reducer<std::pair<double,size_t>,typename Accumulators<U>::double_mean,1>
+{
+	using A = typename Accumulators<U>::double_mean;
+	double_mean() : Reducer<std::pair<double,size_t>,A,1>(std::make_pair(0.0,1), A()) {}
+};
 
 }
 
