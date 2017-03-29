@@ -40,7 +40,7 @@
 #include <memory>
 #include <initializer_list>
 #include <utility>
-#include <fstream/lib/Stream.hpp>
+#include <shogun/lib/Stream.hpp>
 
 namespace shogun
 {

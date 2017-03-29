@@ -37,7 +37,7 @@
 #include <memory>
 #include <initializer_list>
 #include <utility>
-#include <fstream/lib/Vector.hpp>
+#include <shogun/lib/Vector.hpp>
 
 using namespace shogun;
 

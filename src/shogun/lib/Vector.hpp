@@ -30,8 +30,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef STREAM_HPP__
-#define STREAM_HPP__
+#ifndef VECTOR_HPP__
+#define VECTOR_HPP__
 
 #include <map>
 #include <iostream>
@@ -40,56 +40,32 @@
 #include <memory>
 #include <initializer_list>
 #include <utility>
-#include <fstream/lib/Reducer.hpp>
+#include <shogun/lib/Collection.hpp>
 
 namespace shogun
 {
 
-using Reducers::Reducer;
-using Reducers::custom;
-
-template <class C>
-struct Stream
+template <class T>
+struct Vector : public Collection<T>
 {
-	Stream(C const * const _c) : c(_c) {}
-	template <class R>
-	auto reduce(R& r) -> typename R::unitary_type
+	using iterator_type = typename Collection<T>::iterator_type;
+	Vector(std::initializer_list<T> list)
+		: vec(std::make_unique<T[]>(list.size())), vlen(list.size())
 	{
-		return r.reduce(c);
+		std::copy(list.begin(), list.end(), vec.get());
 	}
-	template <class R1, class R2>
-	auto reduce(R1& r1, R2& r2) -> std::pair<typename R1::unitary_type,typename R2::unitary_type>
+	virtual iterator_type begin() const override
 	{
-		return custom(std::make_pair(r1.unitary, r2.unitary), std::make_pair(r1.accumulate, r2.accumulate)).reduce(c);
+		return iterator_type(vec.get());
 	}
-	template <class...Rs>
-	auto reduce(Rs...rs) -> std::tuple<typename Rs::unitary_type...>
+	virtual iterator_type end() const override
 	{
-		return custom(std::make_tuple(rs.unitary...), std::make_tuple(rs.accumulate...)).reduce(c);
+		return iterator_type(vec.get() + vlen);
 	}
-	auto sum() -> typename C::value_type
-	{
-		typedef typename C::value_type T;
-		return custom(0, [](T& r, T& v) { return r+v; }).reduce(c);
-	}
-	auto prod() -> typename C::value_type
-	{
-		typedef typename C::value_type T;
-		return custom(1, [](T& r, T& v) { return r*v; }).reduce(c);
-	}
-	double double_mean()
-	{
-		typedef typename C::value_type T;
-		auto result = custom(std::make_pair(0.0,1ul), [](std::pair<double,size_t> r, T& v)
-			{
-				auto delta = v - r.first;
-				r.first += delta/r.second++;
-				return r;
-			}).reduce(c);
-		return result.first;
-	}
-	C const * const c;
+	std::unique_ptr<T[]> vec;
+	size_t vlen;
 };
 
 }
-#endif // STREAM_HPP__
+
+#endif // VECTOR_HPP__
