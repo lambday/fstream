@@ -123,12 +123,23 @@ void test_off_the_shelf_reducers_bind_channel(const C& c)
 	const int&(*get_1)(const std::pair<int,int>&) = std::get<1,int,int>;
 
 	cout << "off-the-shelf Recuders bind channel ----------" << endl;
-	cout << "sum = " << c.stream().reduce(bind_channel(sum<int>(), get_0)) << endl;
-	cout << "sum = " << c.stream().reduce(bind_channel(sum<int>(), get_1)) << endl;
-	cout << "prod = " << c.stream().reduce(bind_channel(prod<int>(), get_0)) << endl;
-	cout << "prod = " << c.stream().reduce(bind_channel(prod<int>(), get_1)) << endl;
-	cout << "mean = " << c.stream().reduce(bind_channel(double_mean<int>(), get_0)).first << endl;
-	cout << "mean = " << c.stream().reduce(bind_channel(double_mean<int>(), get_1)).first << endl;
+	cout << "sum(0) = " << c.stream().reduce(bind_channel(sum<int>(), get_0)) << endl;
+	cout << "sum(1)= " << c.stream().reduce(bind_channel(sum<int>(), get_1)) << endl;
+	cout << "prod(0) = " << c.stream().reduce(bind_channel(prod<int>(), get_0)) << endl;
+	cout << "prod(1) = " << c.stream().reduce(bind_channel(prod<int>(), get_1)) << endl;
+	cout << "mean(0) = " << c.stream().reduce(bind_channel(double_mean<int>(), get_0)).first << endl;
+	cout << "mean(1) = " << c.stream().reduce(bind_channel(double_mean<int>(), get_1)).first << endl;
+}
+
+template <class C>
+void test_off_the_shelf_multiple_reducers_bind_channel(const C& c)
+{
+	const int&(*get_0)(const std::pair<int,int>&) = std::get<0,int,int>;
+	const int&(*get_1)(const std::pair<int,int>&) = std::get<1,int,int>;
+
+	auto result = c.stream().reduce(bind_channel(sum<int>(), get_0), bind_channel(double_mean<int>(), get_1));
+	cout << "off-the-shelf Multiple Recuders bind channel ----------" << endl;
+	cout << "sum(0), mean(1) = " << result.first << "," << result.second.first << std::endl;
 }
 
 int main()
@@ -142,5 +153,7 @@ int main()
 
 	Vector<std::pair<int,int>> vp({std::make_pair(1,2),std::make_pair(3,4),std::make_pair(5,6),std::make_pair(7,8)});
 	test_off_the_shelf_reducers_bind_channel(vp);
+	test_off_the_shelf_multiple_reducers_bind_channel(vp);
+
 	return 0;
 }
