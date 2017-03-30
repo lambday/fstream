@@ -45,6 +45,32 @@
 namespace std
 {
 
+template <typename T>
+struct identity
+{
+	T&& operator()(T&& value) const noexcept
+	{
+		return std::forward<T>(value);
+	}
+	const T& operator()(const T& value) const noexcept
+	{
+		return value;
+	}
+};
+
+template <class T>
+struct is_pair
+{
+	static constexpr bool value = false;
+};
+
+template <class A, class B>
+struct is_pair<std::pair<A, B>>
+{
+	static constexpr bool value = true;
+};
+
+// TODO try removing it
 template<size_t I, class T>
 T& get(T& t)
 {
@@ -77,97 +103,131 @@ struct num_elements<std::tuple<A...>>
 	enum { value = std::tuple_size<std::tuple<A...>>::value };
 };
 
-template <class R, class V, size_t N, size_t I>
-struct accumulate_all : accumulate_all<R,V,N,I-1>
+template <class R, class V, class F, size_t N, size_t I>
+struct accumulate_all : accumulate_all<R,V,F,N,I-1>
 {
 	typedef typename R::unitary_type U;
 	typedef typename R::accumulator_type A;
-	explicit accumulate_all(U& accumulated, const A& accumulator, const V& value)
-	: accumulate_all<R,V,N,I-1>(accumulated, accumulator, value)
+	explicit accumulate_all(U& result, const A& op, const F& of, const V& value)
+	: accumulate_all<R,V,F,N,I-1>(result, op, of, value)
 	{
-		std::get<I-1>(accumulated) = std::get<I-1>(accumulator)(std::get<I-1>(accumulated), value);
+		std::get<I-1>(result) = std::get<I-1>(op)(std::get<I-1>(result), std::get<I-1>(of)(value));
 	}
 };
 
-template <class R, class V, size_t N>
-struct accumulate_all<R,V,N,1>
+template <class R, class V, class F, size_t N>
+struct accumulate_all<R,V,F,N,1>
 {
 	typedef typename R::unitary_type U;
 	typedef typename R::accumulator_type A;
-	explicit accumulate_all(U& accumulated, const A& accumulator, const V& value)
+	explicit accumulate_all(U& result, const A& op, const F& of, const V& value)
 	{
-		std::get<0>(accumulated) = std::get<0>(accumulator)(std::get<0>(accumulated), value);
+		std::get<0>(result) = std::get<0>(op)(std::get<0>(result), std::get<0>(of)(value));
 	}
 };
 
-template <class R, class V>
-struct accumulate_all<R,V,1,1>
+template <class R, class V, class F>
+struct accumulate_all<R,V,F,1,1>
 {
 	typedef typename R::unitary_type U;
 	typedef typename R::accumulator_type A;
-	explicit accumulate_all(U& accumulated, const A& accumulator, const V& value)
+	explicit accumulate_all(U& result, const A& op, const F& of, const V& value)
 	{
-		accumulated = accumulator(accumulated, value);
+		result = op(result, of(value));
 	}
 };
 
-template <class R, class V>
-struct accumulate : accumulate_all<R,V,R::num_tasks,R::num_tasks>
+template <class R, class V, class F>
+struct accumulate : accumulate_all<R,V,F,R::num_tasks,R::num_tasks>
 {
 	typedef typename R::unitary_type U;
 	typedef typename R::accumulator_type A;
-	explicit accumulate(U& accumulated, const A& accumulator, const V& value)
-	: accumulate_all<R,V,R::num_tasks,R::num_tasks>(accumulated, accumulator, value)
+	explicit accumulate(U& result, const A& op, const F& of, const V& value)
+	: accumulate_all<R,V,F,R::num_tasks,R::num_tasks>(result, op, of, value)
 	{
+	}
+};
+
+template <class RC, class F>
+struct BindConfig
+{
+	using unitary_type = typename RC::unitary_type;
+	BindConfig(const RC& _rc, const F& _of) : rc(_rc), of(_of) {}
+	const RC rc;
+	const F of;
+};
+
+class Reducer
+{
+public:
+	template <class C, class RC, class F>
+	auto operator()(C const * const c, BindConfig<RC,F> rc_of) const -> typename RC::unitary_type
+	{
+		return reduce(c->begin(), c->end(), rc_of.rc, rc_of.of);
+	}
+private:
+	template <class It, class RC, class F>
+	auto reduce(It first, It last, const RC& rc, const F& of) const -> typename RC::unitary_type
+	{
+		typedef typename It::value_type V;
+		auto result = rc.init;
+		for (auto it = first; it != last; ++it)
+		{
+			accumulate<RC,V,decltype(of)>(result, rc.op, of, *it);
+		}
+		return result;
 	}
 };
 
 template <class U, class A, size_t N>
-struct Reducer
+struct Config
 {
 	using unitary_type = U;
 	using accumulator_type = A;
-	using type = Reducer<U,A,N>;
 	static constexpr size_t num_tasks = N;
+	using type = Config<U,A,N>;
 
-	Reducer(const U& _unitary, const A& _accumulator) : unitary(_unitary), accumulator(_accumulator)
+	Config(const U& _init, const A& _op) : init(_init), op(_op)
 	{
 	}
+	Config(const Config& other) = default;
+	Config& operator=(const Config& other) = default;
+	~Config() = default;
 
-	Reducer(const Reducer& other) = default;
-	Reducer& operator=(const Reducer& other) = default;
-	~Reducer() = default;
-
-	template <class C>
-	U reduce(C const * const c) const
-	{
-		return reduce(c->begin(), c->end(), unitary);
-	}
-
-	template <class It>
-	U reduce(It begin, It end, U accumulated) const
-	{
-		typedef typename It::value_type V;
-		for (auto it = begin; it != end; ++it)
-		{
-			accumulate<type,V>(accumulated, accumulator, *it);
-		}
-		return accumulated;
-	}
-
-	const U unitary;
-	const A accumulator;
+	const U init;
+	const A op;
 };
 
 template <class U, class A>
-auto custom(const U& unitary, const A& accumulator) -> Reducer<U,A,num_elements<A>::value>
+auto custom(const U& init, const A& op) -> Config<U,A,num_elements<A>::value>
 {
-	return Reducer<U,A,num_elements<A>::value>(unitary, accumulator);
+	return Config<U,A,num_elements<A>::value>(init, op);
+}
+
+template <class U, class A, class F>
+auto custom(const U& init, const A& op, const F& of)
+	-> BindConfig<Config<U,A,num_elements<A>::value>,F>
+{
+	return bind_channel(Config<U,A,num_elements<A>::value>(init, op), of);
+}
+
+template <class RC, class F>
+BindConfig<RC,F> bind_channel(const RC& rc, const F& of)
+{
+	return BindConfig<RC,F>(rc, of);
+}
+
+template <class RC, class R, class... Args>
+BindConfig<RC,std::function<R(Args...)>> bind_channel(const RC& rc, R(*of)(Args...))
+{
+	using F = std::function<R(Args...)>;
+	return BindConfig<RC,F>(rc, F(of));
 }
 
 template <typename T>
 struct Accumulators
 {
+	// TODO move inside the Config subclasses
 	struct sum { T& operator()(T& r, const T& v) const { r+=v; return r; }};
 	struct prod { T& operator()(T& r, const T& v) const { r*=v; return r; }};
 	struct double_mean
@@ -182,24 +242,24 @@ struct Accumulators
 };
 
 template <typename U>
-struct sum : Reducer<U,typename Accumulators<U>::sum,1>
+struct sum : Config<U,typename Accumulators<U>::sum,1>
 {
 	using A = typename Accumulators<U>::sum;
-	sum() : Reducer<U,A,1>(0, A()) {}
+	sum() : Config<U,A,1>(0, A()) {}
 };
 
 template <typename U>
-struct prod : Reducer<U,typename Accumulators<U>::prod,1>
+struct prod : Config<U,typename Accumulators<U>::prod,1>
 {
 	using A = typename Accumulators<U>::prod;
-	prod() : Reducer<U,A,1>(1, A()) {}
+	prod() : Config<U,A,1>(1, A()) {}
 };
 
 template <typename U>
-struct double_mean : Reducer<std::pair<double,size_t>,typename Accumulators<U>::double_mean,1>
+struct double_mean : Config<std::pair<double,size_t>,typename Accumulators<U>::double_mean,1>
 {
 	using A = typename Accumulators<U>::double_mean;
-	double_mean() : Reducer<std::pair<double,size_t>,A,1>(std::make_pair(0.0,1), A()) {}
+	double_mean() : Config<std::pair<double,size_t>,A,1>(std::make_pair(0.0,1ul), A()) {}
 };
 
 }

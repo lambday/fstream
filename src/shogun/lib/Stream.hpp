@@ -47,42 +47,73 @@ namespace shogun
 
 using Reducers::Reducer;
 using Reducers::custom;
+using Reducers::BindConfig;
+using Reducers::bind_channel;
 
 template <class C>
-struct Stream
+class Stream
 {
-	Stream(C const * const _c) : c(_c) {}
-	template <class R>
-	auto reduce(const R& r) -> typename R::unitary_type
+public:
+	typedef typename C::iterator_type::value_type T;
+	Stream(C const * const _c) : c(_c), reducer() {}
+	template <class RC>
+	auto reduce(const RC& rc) -> typename RC::unitary_type
 	{
-		return r.reduce(c);
+		return reduce(c, bind_channel_if_not(rc));
 	}
-	template <class R1, class R2>
-	auto reduce(const R1& r1, const R2& r2) -> std::pair<typename R1::unitary_type,typename R2::unitary_type>
+	template <class RC1, class RC2>
+	auto reduce(const RC1& rc1, const RC2& rc2) -> std::pair<typename RC1::unitary_type,typename RC2::unitary_type>
 	{
-		return custom(std::make_pair(r1.unitary, r2.unitary), std::make_pair(r1.accumulator, r2.accumulator)).reduce(c);
+		return reduce(c, bind_channel_if_not(rc1), bind_channel_if_not(rc2));
 	}
-	template <class...Rs>
-	auto reduce(const Rs&...rs) -> std::tuple<typename Rs::unitary_type...>
+	template <class...RCs>
+	auto reduce(const RCs&...rcs) -> std::tuple<typename RCs::unitary_type...>
 	{
-		return custom(std::make_tuple(rs.unitary...), std::make_tuple(rs.accumulator...)).reduce(c);
+		return reduce(c, bind_channel_if_not(rcs)...);
 	}
-	auto sum() -> typename C::value_type
+	auto sum() -> typename C::iterator_type::value_type
 	{
-		typedef typename C::value_type T;
-		return Reducers::sum<T>().reduce(c);
+		return reduce(c, bind_channel(Reducers::sum<T>(), std::identity<T>()));
 	}
-	auto prod() -> typename C::value_type
+	auto prod() -> typename C::iterator_type::value_type
 	{
-		typedef typename C::value_type T;
-		return Reducers::prod<T>().reduce(c);
+		return reduce(c, bind_channel(Reducers::prod<T>(), std::identity<T>()));
 	}
 	double double_mean()
 	{
-		typedef typename C::value_type T;
-		return Reducers::double_mean<T>().reduce(c).first;
+		return reduce(c, bind_channel(Reducers::double_mean<T>(), std::identity<T>())).first;
+	}
+private:
+	template <class RC>
+	BindConfig<RC, std::identity<T>> bind_channel_if_not(const RC& rc) const
+	{
+		return bind_channel(rc, std::identity<T>());
+	}
+	template <class RC, class F>
+	const BindConfig<RC, F>& bind_channel_if_not(const BindConfig<RC, F>& bc) const
+	{
+		return bc;
+	}
+	template <class BC>
+	auto reduce(C const * const c, const BC& bc) -> typename BC::unitary_type
+	{
+		return reducer(c, bc);
+	}
+	template <class BC1, class BC2>
+	auto reduce(C const * const c, const BC1& bc1, const BC2& bc2) -> std::pair<typename BC1::unitary_type,typename BC2::unitary_type>
+	{
+		return reducer(c, custom(std::make_pair(bc1.rc.init, bc2.rc.init),
+					std::make_pair(bc1.rc.op, bc2.rc.op),
+					std::make_pair(bc1.of, bc2.of)));
+	}
+	template <class... BCs>
+	auto reduce(C const * const c, const BCs&...bcs) -> std::tuple<typename BCs::unitary_type...>
+	{
+		return reducer(c, custom(std::make_tuple(bcs.rc.init...),
+					std::make_tuple(bcs.rc.op...), std::make_tuple(bcs.of...)));
 	}
 	C const * const c;
+	const Reducer reducer;
 };
 
 }
