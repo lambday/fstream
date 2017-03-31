@@ -1,6 +1,6 @@
 class CDistance
 {
-	SGMatrix<float64_t> CDistance::get_distance_matrix()
+	SGMatrix<float64_t> CDistance::get_distance_matrix() const
 	{
 		SGMatrix<float64_t> distance_matrix(lhs.size(), rhs.size());
 		for (const auto& sample : rhs)
@@ -31,7 +31,7 @@ class CEuclideanDistance
 			.map(sq_norm_functor)
 			.collect(Collectors::to_vector<float64_t>());
 	}
-	virtual float64_t distance(CFeatureSample const * first, CFeaturesSample const * second) override
+	virtual float64_t distance(CFeatureSample const * first, CFeaturesSample const * second) const override
 	{
 		auto first_dot_feature = static_cast<CDotFeatureSample const *>(first);
 		auto second_dot_feature = static_cast<CDotFeatureSample const *>(second);
@@ -42,7 +42,7 @@ class CEuclideanDistance
 
 class CKernel
 {
-	SGMatrix<float64_t> CKernel::get_kernel_matrix()
+	SGMatrix<float64_t> CKernel::get_kernel_matrix() const
 	{
 		SGMatrix<float64_t> kernel_matrix(lhs.size(), rhs.size());
 		for (const auto& sample : rhs)
@@ -86,7 +86,7 @@ class CBTestMMD
 	/**
 	 * Example of packing multiple computation job per element in the stream and reducing to multiple values
 	 */
-	std::pair<float64_t, float64_t> compute_statistic_variance()
+	std::pair<float64_t, float64_t> compute_statistic_variance() const
 	{
 		// punching multiple jobs together for performance reasons
 		// can use it for computing both these value simultaneously
@@ -134,5 +134,54 @@ class CBTestMMD
 				.collect([&mc]() { return mc; }, &MultiCollector::add);
 		}
 		return make_pair(normalize_statistic(mc.statistic), normalize_variance(mc.variance));
+	}
+
+	/**
+	 * More complex example - ordering matters.
+	 */
+	std::pair<SGVector<float64_t>,SGMatrix<float64_t>> compute_statistic_and_Q(const KernelManager& kernel_mgr) const
+	{
+		SGVector<float64_t> mmds(kernel_mgr.size());
+		SGMatrix<float64_t,float64_t> Q(kernel_mgr.size(), kernel_mgr.size());
+		SGMatrix<float64_t,float64_t> cache(Q.num_rows, Q.num_cols);
+
+		auto categorized_kernel_inds = IntStream::range(0, kernel_mgr.size())
+			.filter([&kernel_mgr](size_t i)
+			{
+				return kernel_mgr.kernel_at(i)->get_kernel_type() == SHIFT_INVARIANT;
+			})
+			.collect(Collectors::grouping_by([&kernel_mgr](size_t i)
+			{
+				return kernel_mgr.kernel_at(i)->get_distance()->get_distance_type();
+			});
+
+		// also, obtain the indices which are not shift invariant kernel
+		Stream::as_collection(categorized_kernel_inds).stream().flat_map() // TODO
+
+		data_mgr.block_stream(blocksize)
+			.map([&kernel_mgr,&cache](const NextSamples& next_samples)
+			{
+				auto samples_p = next_samples.sample_at(0);
+				auto samples_q = next_samples.sample_at(0);
+
+				Stream::as_collection(categorized_kernel_inds).stream()
+					.map([&samples_p,&samples_q,&kernel_mgr](const std::vector<size_t>& inds)
+					{
+						// there will always be at least one element in kernels, other_sample
+						// there won't be an entry in the grouby return map
+						auto dmatrix = kernel_mgr[inds[0]]->distance(samples_p, samples_q);
+						Stream::as_collection(inds).stream()
+							.map([&distance_matrix])(size_t i)
+							{
+								auto kernel = k->clone();
+								kernel->init(distance_matrix);
+								return clone->get_kernel_matrix();
+							}
+							.map(statistic_job)
+							.collect()
+					}
+					.map(statistic_job)
+					.collect();
+			}
 	}
 }
