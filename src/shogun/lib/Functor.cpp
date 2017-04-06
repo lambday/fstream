@@ -8,22 +8,22 @@
 
 using std::declval;
 
+// fmap :: Functor f => (a -> b) -> f a -> f b
+// takes a function that maps a -> b
+// takes a f(a) type instance
+// returns a f(b) type instance
 template <class Function, class S, class T>
 struct Functor
 {
 		template <class A>
-		using f_applied_type = decltype((declval<Function>())(declval<A>()));
+		using typeof_f_applied_to = decltype((declval<Function>())(declval<A>()));
 
 		template <class Mapper>
 		using T_i = decltype((declval<Mapper>())(declval<T>()));
 
 		template <class Mapper>
-		Functor(const Mapper& map, const f_applied_type<S>& _f_s) : mapper(map), f_s(_f_s) {}
+		Functor(const Mapper& map, const typeof_f_applied_to<S>& _f_s) : mapper(map), f_s(_f_s) {}
 
-		// fmap :: Functor f => (a -> b) -> f a -> f b
-		// takes a function that maps a -> b
-		// takes a f(a) type instance
-		// returns a f(b) type instance
 		template <class Mapper>
 		Functor<Function,S,T_i<Mapper>> fmap(const Mapper& map) const
 		{
@@ -33,10 +33,6 @@ struct Functor
 					}, f_s);
 		}
 
-		// fmap :: Functor f => (a -> b) -> f a -> f b
-		// takes a function that maps a -> b
-		// takes a f(a) type instance
-		// returns a f(b) type instance
 		template <class T_i>
 		Functor<Function,S,T_i> fmap(T_i(* const map)(const T&)) const
 		{
@@ -46,13 +42,23 @@ struct Functor
 					}, f_s);
 		}
 
-		f_applied_type<T> get() const
+		typeof_f_applied_to<T> get() const
 		{
 				return Function::apply(mapper, f_s);
 		}
 
 		const std::function<T(S)> mapper;
-		const f_applied_type<S>& f_s;
+		const typeof_f_applied_to<S>& f_s;
+};
+
+// Monad
+template <class Function, class S, class T>
+struct Monad : Functor<Function, S, Functor<Function, S, T>>
+{
+		Functor<Function, S, T> mjoin()
+		{
+				// TODO
+		}
 };
 
 struct Vector
@@ -81,6 +87,13 @@ double sqrt(const int& a)
 void test(std::vector<int>& l)
 {
 		auto r = make_functor(l)
+			.fmap([](int x)
+			{
+				std::vector<int> v(x);
+				std::iota(v.begin(), v.end(), 1);
+				return make_functor(v);
+			})
+			.mjoin()
 			.fmap(&sqrt)
 			.fmap([](const double& x)
 			{
@@ -100,8 +113,8 @@ void test(std::vector<int>& l)
 
 int main()
 {
-		std::vector<int> l(10);
-		std::iota(l.begin(), l.end(), 10);
+		std::vector<int> l(5);
+		std::iota(l.begin(), l.end(), 1);
 		test(l);
 		return 0;
 }
