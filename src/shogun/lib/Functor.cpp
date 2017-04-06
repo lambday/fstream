@@ -8,50 +8,51 @@
 
 using std::declval;
 
-template <template <class...> class Function>
+template <class Function, class S, class T>
 struct Functor
 {
-		template <class T>
-		using f_applied_type = decltype((declval<Function<T>>())(declval<T>()));
+		template <class A>
+		using f_applied_type = decltype((declval<Function>())(declval<A>()));
+
+		template <class Mapper>
+		using T_i = decltype((declval<Mapper>())(declval<T>()));
+
+		template <class Mapper>
+		Functor(const Mapper& map, const f_applied_type<S>& _f_s) : mapper(map), f_s(_f_s) {}
 
 		// fmap :: Functor f => (a -> b) -> f a -> f b
 		// takes a function that maps a -> b
 		// takes a f(a) type instance
 		// returns a f(b) type instance
-		template <class S, class T>
-		static f_applied_type<T> fmap(const std::function<T(S)>& map, f_applied_type<S>&& f_s)
+		template <class Mapper>
+		Functor<Function,S,T_i<Mapper>> fmap(const Mapper& map) const
 		{
-				return f_s.apply(map);
-		}
-};
-
-template <class S>
-struct EagerFunctor : Functor<EagerFunctor>
-{
-		EagerFunctor<S> operator()(S...) const;
-
-		template <class T> using data_type = std::vector<T>;
-
-		EagerFunctor() : data(data_type<S>()) {}
-		EagerFunctor(const data_type<S>& _data) : data(_data)
-		{
-				std::cout << "constructed from vector" << std::endl;
+				return Functor<Function,S,T_i<Mapper>>([this, &map](const S& s)
+					{
+						return std::forward<T_i<Mapper>>(map(std::forward<T>(mapper(s))));
+					}, f_s);
 		}
 
-		template <class T>
-		EagerFunctor<T> apply(const std::function<T(S)>& map) const
+		// fmap :: Functor f => (a -> b) -> f a -> f b
+		// takes a function that maps a -> b
+		// takes a f(a) type instance
+		// returns a f(b) type instance
+		template <class T_i>
+		Functor<Function,S,T_i> fmap(T_i(* const map)(const T&)) const
 		{
-				data_type<T> target(data.size());
-				std::transform(data.begin(), data.end(), target.begin(), map);
-				return EagerFunctor<T>(target);
+				return Functor<Function,S,T_i>([this, &map](const S& s)
+					{
+						return std::forward<T_i>(map(std::forward<T>(mapper(s))));
+					}, f_s);
 		}
 
-		const data_type<S>& get() const
+		f_applied_type<T> get() const
 		{
-				return data;
+				return Function::apply(mapper, f_s);
 		}
 
-		const data_type<S>& data;
+		const std::function<T(S)> mapper;
+		const f_applied_type<S>& f_s;
 };
 
 struct Vector
@@ -66,53 +67,10 @@ struct Vector
 		}
 };
 
-template <class Function, class S, class T>
-struct LazyFunctor
-{
-		template <class A>
-		using f_applied_type = decltype((declval<Function>())(declval<A>()));
-
-		template <class Mapper>
-		LazyFunctor(const Mapper& map, const f_applied_type<S>& _f_s)
-		: mapper(map), f_s(_f_s)
-		{
-				std::cout << "constructed from vector" << std::endl;
-		}
-
-		template <class Mapper>
-		auto fmap(const Mapper& map) const
-		-> LazyFunctor<Function,S,decltype((declval<Mapper>())(declval<T>()))>
-		{
-				typedef decltype((declval<Mapper>())(declval<T>())) T_i;
-				return LazyFunctor<Function,S,T_i>([this, &map](const S& s)
-					{
-						return map(mapper(s));
-					}, f_s);
-		}
-
-		template <class T_i>
-		LazyFunctor<Function,S,T_i> fmap(T_i(* const map)(const T&)) const
-		{
-				return LazyFunctor<Function,S,T_i>([this, &map](const S& s)
-					{
-						return map(mapper(s));
-					}, f_s);
-		}
-
-		f_applied_type<T> get() const
-		{
-				return Function::apply(mapper, f_s);
-		}
-
-		const std::function<T(S)> mapper;
-		const f_applied_type<S>& f_s;
-};
-
-// make it a friend
 template <class S>
-LazyFunctor<Vector,S,S> make_functor(const std::vector<S>& f_s)
+Functor<Vector,S,S> make_functor(const std::vector<S>& f_s)
 {
-		return LazyFunctor<Vector,S,S>([](const S& s) { return s; }, f_s);
+		return Functor<Vector,S,S>([](S&& s) { return std::forward<S>(s); }, f_s);
 }
 
 double sqrt(const int& a)
@@ -120,20 +78,21 @@ double sqrt(const int& a)
 		return std::sqrt(a);
 }
 
-void test()
+void test(std::vector<int>& l)
 {
-		std::vector<int> l(10);
-		std::iota(l.begin(), l.end(), 10);
-
 		auto r = make_functor(l)
-				.fmap(&sqrt)
-				.fmap([](double x)
-				{
-					return std::to_string(x);
-				})
-				.get();
+			.fmap(&sqrt)
+			.fmap([](const double& x)
+			{
+				return std::forward<std::string>(std::to_string(x));
+			})
+			.fmap([](const std::string& x)
+			{
+				return std::forward<float>(std::stof(x)/2);
+			})
+			.get();
 
-		std::for_each(r.begin(), r.end(), [](std::string s)
+		std::for_each(r.begin(), r.end(), [](float s)
 		{
 			std::cout << s << std::endl;
 		});
@@ -141,6 +100,8 @@ void test()
 
 int main()
 {
-		test();
+		std::vector<int> l(10);
+		std::iota(l.begin(), l.end(), 10);
+		test(l);
 		return 0;
 }
