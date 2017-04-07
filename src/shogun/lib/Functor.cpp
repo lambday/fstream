@@ -12,50 +12,53 @@ using std::declval;
 // takes a function that maps a -> b
 // takes a f(a) type instance
 // returns a f(b) type instance
-template <class Function, class S, class T>
+template <class Function, class A, class B>
 struct Functor
 {
-		template <class A>
-		using typeof_f_applied_to = decltype((declval<Function>())(declval<A>()));
+		template <class T>
+		using typeof_f_applied_to = decltype((declval<Function>())(declval<T>()));
 
 		template <class Mapper>
-		using T_i = decltype((declval<Mapper>())(declval<T>()));
-
-		template <class Mapper>
-		Functor(const Mapper& map, const typeof_f_applied_to<S>& _f_s) : mapper(map), f_s(_f_s) {}
-
-		template <class Mapper>
-		Functor<Function,S,T_i<Mapper>> fmap(const Mapper& map) const
+		Functor(const Mapper& identity, const typeof_f_applied_to<A>& _f_a)
+		: mapper(identity), f_a(_f_a)
 		{
-				return Functor<Function,S,T_i<Mapper>>([this, &map](const S& s)
+		}
+
+		template <class Mapper>
+		Functor<Function,A,decltype((declval<Mapper>())(declval<B>()))> fmap(const Mapper& map) const
+		{
+				using B_i = decltype((declval<Mapper>())(declval<B>()));
+				auto composite_mapper = [this, &map](const A& a)
 					{
-						return std::forward<T_i<Mapper>>(map(std::forward<T>(mapper(s))));
-					}, f_s);
+						return std::forward<B_i>(map(std::forward<B>(mapper(a))));
+					};
+				return Functor<Function,A,B_i>(composite_mapper, f_a);
 		}
 
-		template <class T_i>
-		Functor<Function,S,T_i> fmap(T_i(* const map)(const T&)) const
+		template <class B_i>
+		Functor<Function,A,B_i> fmap(B_i(* const map)(const B&)) const
 		{
-				return Functor<Function,S,T_i>([this, &map](const S& s)
+				auto composite_mapper = [this, &map](const A& a)
 					{
-						return std::forward<T_i>(map(std::forward<T>(mapper(s))));
-					}, f_s);
+						return std::forward<B_i>(map(std::forward<B>(mapper(a))));
+					};
+				return Functor<Function,A,B_i>(composite_mapper, f_a);
 		}
 
-		typeof_f_applied_to<T> get() const
+		typeof_f_applied_to<B> get() const
 		{
-				return Function::apply(mapper, f_s);
+				return Function::apply(mapper, f_a);
 		}
 
-		const std::function<T(S)> mapper;
-		const typeof_f_applied_to<S>& f_s;
+		const std::function<B(A)> mapper;
+		const typeof_f_applied_to<A>& f_a;
 };
 
 // Monad
-template <class Function, class S, class T>
-struct Monad : Functor<Function, S, Functor<Function, S, T>>
+template <class Function, class A, class B>
+struct Monad : Functor<Function, A, Functor<Function, A, B>>
 {
-		Functor<Function, S, T> mjoin()
+		Functor<Function, A, B> mjoin()
 		{
 				// TODO
 		}
@@ -63,20 +66,20 @@ struct Monad : Functor<Function, S, Functor<Function, S, T>>
 
 struct Vector
 {
-		template <class T> std::vector<T> operator()(T...) const;
-		template <class T, class S>
-		static std::vector<T> apply(const std::function<T(S)>& mapper, const std::vector<S>& source)
+		template <class B> std::vector<B> operator()(B...) const;
+		template <class B, class A>
+		static std::vector<B> apply(const std::function<B(A)>& mapper, const std::vector<A>& source)
 		{
-				std::vector<T> target(source.size());
+				std::vector<B> target(source.size());
 				std::transform(source.begin(), source.end(), target.begin(), mapper);
 				return target;
 		}
 };
 
-template <class S>
-Functor<Vector,S,S> make_functor(const std::vector<S>& f_s)
+template <class A>
+Functor<Vector,A,A> make_functor(const std::vector<A>& f_a)
 {
-		return Functor<Vector,S,S>([](S&& s) { return std::forward<S>(s); }, f_s);
+		return Functor<Vector,A,A>([](A&& a) { return std::forward<A>(a); }, f_a);
 }
 
 double sqrt(const int& a)
@@ -87,13 +90,13 @@ double sqrt(const int& a)
 void test(std::vector<int>& l)
 {
 		auto r = make_functor(l)
-			.fmap([](int x)
-			{
-				std::vector<int> v(x);
-				std::iota(v.begin(), v.end(), 1);
-				return make_functor(v);
-			})
-			.mjoin()
+//			.fmap([](int x)
+//			{
+//				std::vector<int> v(x);
+//				std::iota(v.begin(), v.end(), 1);
+//				return make_functor(v);
+//			})
+//			.mjoin()
 			.fmap(&sqrt)
 			.fmap([](const double& x)
 			{
