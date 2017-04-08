@@ -30,60 +30,26 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <iostream>
+#ifndef MONAD_HPP__
+#define MONAD_HPP__
+
 #include <functional>
-#include <algorithm>
-#include <numeric>
-#include <cmath>
-#include <shogun/lib/Vector.hpp>
+#include <shogun/lib/Functor.hpp>
 
-using namespace shogun;
-
-double sqrt(const int& a)
+namespace shogun
 {
-	return std::sqrt(a);
-}
 
-void test(const Vector<int>& l)
+template <class A>
+struct Monad : public Functor<A>
 {
-	const auto& r = Functional::evaluate(l)
-//		.composite([](int x)
-//		{
-//			std::vector<int> v(x);
-//			std::iota(v.begin(), v.end(), 1);
-//			return Functional::as_functor(v);
-//		})
-//		.mjoin()
-		.composite(&sqrt)
-		.composite([](double x)
-		{
-			return std::to_string(x);
-		})
-		.composite([](const std::string& x)
-		{
-			return std::stof(x)/2;
-		})
-		.yield();
+	virtual ~Monad() {};
 
-		std::for_each(r.begin(), r.end(), [](float s)
-		{
-			std::cout << s << std::endl;
-		});
+	template <class B>
+	Monad<B> join(const Monad<Monad<B>>&) const;
 
-//		std::for_each(r.begin(), r.end(), [](std::vector<int>& v)
-//		{
-//			std::for_each(v.begin(), v.end(), [](int s)
-//			{
-//				std::cout << s << " ";
-//			});
-//			std::cout << std::endl;
-//		});
+	template <class B>
+	Monad<B> bind(const std::function<Monad<B>(A)>&) const;
+};
+
 }
-
-int main()
-{
-	Vector<int> l(10);
-	std::iota(l.begin(), l.end(), 1);
-	test(l);
-	return 0;
-}
+#endif // MONAD_HPP__

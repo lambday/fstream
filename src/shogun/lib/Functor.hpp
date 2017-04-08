@@ -30,60 +30,22 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <iostream>
+#ifndef FUNCTOR_HPP__
+#define FUNCTOR_HPP__
+
 #include <functional>
-#include <algorithm>
-#include <numeric>
-#include <cmath>
-#include <shogun/lib/Vector.hpp>
 
-using namespace shogun;
-
-double sqrt(const int& a)
+namespace shogun
 {
-	return std::sqrt(a);
-}
 
-void test(const Vector<int>& l)
+template <class A>
+struct Functor
 {
-	const auto& r = Functional::evaluate(l)
-//		.composite([](int x)
-//		{
-//			std::vector<int> v(x);
-//			std::iota(v.begin(), v.end(), 1);
-//			return Functional::as_functor(v);
-//		})
-//		.mjoin()
-		.composite(&sqrt)
-		.composite([](double x)
-		{
-			return std::to_string(x);
-		})
-		.composite([](const std::string& x)
-		{
-			return std::stof(x)/2;
-		})
-		.yield();
+	virtual ~Functor() {};
 
-		std::for_each(r.begin(), r.end(), [](float s)
-		{
-			std::cout << s << std::endl;
-		});
+	template <class B>
+	Functor<B> fmap(const std::function<B(A)>&) const;
+};
 
-//		std::for_each(r.begin(), r.end(), [](std::vector<int>& v)
-//		{
-//			std::for_each(v.begin(), v.end(), [](int s)
-//			{
-//				std::cout << s << " ";
-//			});
-//			std::cout << std::endl;
-//		});
 }
-
-int main()
-{
-	Vector<int> l(10);
-	std::iota(l.begin(), l.end(), 1);
-	test(l);
-	return 0;
-}
+#endif // FUNCTOR_HPP__

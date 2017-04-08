@@ -40,14 +40,16 @@
 #include <memory>
 #include <initializer_list>
 #include <utility>
-#include <shogun/lib/Stream.hpp>
+#include <shogun/lib/Monad.hpp>
 
 namespace shogun
 {
 
 template <class T>
-struct Collection
+struct Collection : public Monad<T>
 {
+	virtual ~Collection() {}
+
 	template <class V>
 	struct iterator : std::iterator<std::bidirectional_iterator_tag,V>
 	{
@@ -68,12 +70,12 @@ struct Collection
 		V& operator*() { return *ptr; }
 		V* ptr;
 	};
+
 	using value_type = T;
 	using iterator_type = iterator<T>;
-	Stream<Collection<T>> stream() const
-	{
-		return Stream<Collection<T>>(this);
-	}
+
+	virtual iterator<T> begin() = 0;
+	virtual iterator<T> end() = 0;
 	virtual iterator<T> begin() const = 0;
 	virtual iterator<T> end() const = 0;
 };

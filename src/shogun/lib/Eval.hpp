@@ -30,60 +30,77 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <iostream>
+#ifndef EVAL_HPP__
+#define EVAL_HPP__
+
 #include <functional>
-#include <algorithm>
-#include <numeric>
-#include <cmath>
-#include <shogun/lib/Vector.hpp>
 
-using namespace shogun;
+using std::declval;
 
-double sqrt(const int& a)
+namespace shogun
 {
-	return std::sqrt(a);
+
+template <class Functor, class A, class B>
+struct Eval
+{
+	template <class T>
+	using typeof_f_of = decltype((declval<Functor>())(declval<T>()));
+
+	Eval(std::function<B(A)>&& map, const typeof_f_of<A>& _f_a) : mapper(map), f_a(_f_a)
+	{
+	}
+
+	template <class Map>
+	Eval<Functor,A,decltype((declval<Map>())(declval<B>()))> composite(const Map& map) const
+	{
+		using C = decltype((declval<Map>())(declval<B>()));
+		auto composite_mapper = [this, &map](const A& a)
+		{
+			return std::forward<C>(map(std::forward<B>(mapper(a))));
+		};
+		return Eval<Functor,A,C>(composite_mapper, f_a);
+	}
+
+	template <class C>
+	Eval<Functor,A,C> composite(C(* const map)(const B&)) const
+	{
+		auto composite_mapper = [this, &map](const A& a)
+		{
+			return std::forward<C>(map(std::forward<B>(mapper(a))));
+		};
+		return Eval<Functor,A,C>(composite_mapper, f_a);
+	}
+
+	typeof_f_of<B>&& yield() const
+	{
+		return std::forward<typeof_f_of<B>>(f_a.fmap(mapper));
+	}
+
+	const std::function<B(A)> mapper;
+	const typeof_f_of<A>& f_a;
+};
+
+template <class Monad, class A, class B>
+struct Eval<Monad, A, Eval<Monad, A, B>>
+{
+	template <class T>
+	using typeof_m_of = decltype((declval<Monad>())(declval<T>()));
+
+	Eval(std::function<Eval<Monad, A, B>(A)>&& map, const typeof_m_of<A>& _f_a)
+	: mapper(map), f_a(_f_a)
+	{
+	}
+
+//	Eval<Monad, A, B> mjoin() const
+//	{
+//		auto flattened_mapper = []() {};
+//		return Eval<Monad,A,B>(flattened_mapper, f_a);
+//	}
+
+	const std::function<Eval<Monad, A, B>(A)> mapper;
+	const typeof_m_of<A>& f_a;
+};
+
 }
 
-void test(const Vector<int>& l)
-{
-	const auto& r = Functional::evaluate(l)
-//		.composite([](int x)
-//		{
-//			std::vector<int> v(x);
-//			std::iota(v.begin(), v.end(), 1);
-//			return Functional::as_functor(v);
-//		})
-//		.mjoin()
-		.composite(&sqrt)
-		.composite([](double x)
-		{
-			return std::to_string(x);
-		})
-		.composite([](const std::string& x)
-		{
-			return std::stof(x)/2;
-		})
-		.yield();
-
-		std::for_each(r.begin(), r.end(), [](float s)
-		{
-			std::cout << s << std::endl;
-		});
-
-//		std::for_each(r.begin(), r.end(), [](std::vector<int>& v)
-//		{
-//			std::for_each(v.begin(), v.end(), [](int s)
-//			{
-//				std::cout << s << " ";
-//			});
-//			std::cout << std::endl;
-//		});
-}
-
-int main()
-{
-	Vector<int> l(10);
-	std::iota(l.begin(), l.end(), 1);
-	test(l);
-	return 0;
-}
+#endif // EVAL_HPP__

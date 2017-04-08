@@ -33,14 +33,12 @@
 #ifndef VECTOR_HPP__
 #define VECTOR_HPP__
 
-#include <map>
 #include <iostream>
 #include <functional>
-#include <tuple>
 #include <memory>
 #include <initializer_list>
-#include <utility>
 #include <shogun/lib/Collection.hpp>
+#include <shogun/lib/Eval.hpp>
 
 namespace shogun
 {
@@ -49,22 +47,66 @@ template <class T>
 struct Vector : public Collection<T>
 {
 	using iterator_type = typename Collection<T>::iterator_type;
+	template <class A> Vector<A> operator()(A...) const;
+
+	virtual ~Vector() {}
+
 	Vector(std::initializer_list<T> list)
-		: vec(std::make_unique<T[]>(list.size())), vlen(list.size())
+	: vec(std::make_unique<T[]>(list.size())), vlen(list.size())
 	{
 		std::copy(list.begin(), list.end(), vec.get());
 	}
+
+	Vector(size_t size)
+	: vec(std::make_unique<T[]>(size)), vlen(size)
+	{
+		std::fill(begin(), end(), static_cast<T>(0));
+	}
+
+	virtual iterator_type begin() override
+	{
+		return iterator_type(vec.get());
+	}
+
+	virtual iterator_type end() override
+	{
+		return iterator_type(vec.get() + vlen);
+	}
+
 	virtual iterator_type begin() const override
 	{
 		return iterator_type(vec.get());
 	}
+
 	virtual iterator_type end() const override
 	{
 		return iterator_type(vec.get() + vlen);
 	}
+
+	// fmap :: Functor f => (a -> b) -> f a -> f b
+	template <class B>
+	Vector<B>&& fmap(const std::function<B(T)>& mapper) const
+	{
+		Vector<B> target(vlen);
+		std::transform(begin(), end(), target.begin(), mapper);
+		return std::forward<Vector<B>>(target);
+	}
+
 	std::unique_ptr<T[]> vec;
 	size_t vlen;
 };
+
+namespace Functional
+{
+
+template <class T>
+Eval<Vector<T>,T,T> evaluate(const Vector<T>& f_a)
+{
+	auto identity_map = [](T&& a) { return std::forward<T>(a); };
+	return Eval<Vector<T>,T,T>(identity_map, f_a);
+}
+
+}
 
 }
 
