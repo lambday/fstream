@@ -12,56 +12,66 @@ using std::declval;
 // takes a function that maps a -> b
 // takes a f(a) type instance
 // returns a f(b) type instance
-template <class Function, class A, class B>
-struct Functor
+template <class Functor, class A, class B>
+struct fmap
 {
 		template <class T>
-		using typeof_f_applied_to = decltype((declval<Function>())(declval<T>()));
+		using typeof_f_of = decltype((declval<Functor>())(declval<T>()));
 
-		template <class Mapper>
-		Functor(const Mapper& identity, const typeof_f_applied_to<A>& _f_a)
-		: mapper(identity), f_a(_f_a)
+		fmap(std::function<B(A)>&& map, const typeof_f_of<A>& _f_a) : mapper(map), f_a(_f_a)
 		{
 		}
 
-		template <class Mapper>
-		Functor<Function,A,decltype((declval<Mapper>())(declval<B>()))> fmap(const Mapper& map) const
+		template <class Map>
+		fmap<Functor,A,decltype((declval<Map>())(declval<B>()))> composite(const Map& map) const
 		{
-				using B_i = decltype((declval<Mapper>())(declval<B>()));
+				using C = decltype((declval<Map>())(declval<B>()));
 				auto composite_mapper = [this, &map](const A& a)
 					{
-						return std::forward<B_i>(map(std::forward<B>(mapper(a))));
+						return std::forward<C>(map(std::forward<B>(mapper(a))));
 					};
-				return Functor<Function,A,B_i>(composite_mapper, f_a);
+				return fmap<Functor,A,C>(composite_mapper, f_a);
 		}
 
-		template <class B_i>
-		Functor<Function,A,B_i> fmap(B_i(* const map)(const B&)) const
+		template <class C>
+		fmap<Functor,A,C> composite(C(* const map)(const B&)) const
 		{
 				auto composite_mapper = [this, &map](const A& a)
 					{
-						return std::forward<B_i>(map(std::forward<B>(mapper(a))));
+						return std::forward<C>(map(std::forward<B>(mapper(a))));
 					};
-				return Functor<Function,A,B_i>(composite_mapper, f_a);
+				return fmap<Functor,A,C>(composite_mapper, f_a);
 		}
 
-		typeof_f_applied_to<B> get() const
+		typeof_f_of<B> yield() const
 		{
-				return Function::apply(mapper, f_a);
+				return Functor::apply(mapper, f_a);
 		}
 
 		const std::function<B(A)> mapper;
-		const typeof_f_applied_to<A>& f_a;
+		const typeof_f_of<A>& f_a;
 };
 
 // Monad
-template <class Function, class A, class B>
-struct Monad : Functor<Function, A, Functor<Function, A, B>>
+template <class Functor, class A, class B>
+struct fmap<Functor, A, fmap<Functor, A, B>>
 {
-		Functor<Function, A, B> mjoin()
+		template <class T>
+		using typeof_f_of = decltype((declval<Functor>())(declval<T>()));
+
+		fmap(std::function<B(A)>&& map, const typeof_f_of<A>& _f_a) : mapper(map), f_a(_f_a)
+		{
+				std::cout << "Monad constructed" << std::endl;
+		}
+
+		fmap<Functor, A, B> mjoin()
 		{
 				// TODO
+				typeof_f_of<fmap<Functor, A, B>> f_f_a;
 		}
+
+		const std::function<fmap<Functor, A, B>(A)> mapper;
+		const typeof_f_of<A>& f_a;
 };
 
 struct Vector
@@ -74,49 +84,59 @@ struct Vector
 				std::transform(source.begin(), source.end(), target.begin(), mapper);
 				return target;
 		}
+		template <class A>
+		static fmap<Vector,A,A> as_functor(const std::vector<A>& f_a)
+		{
+				auto identity_map = [](A&& a) { return std::forward<A>(a); };
+				return fmap<Vector,A,A>(identity_map, f_a);
+		}
 };
-
-template <class A>
-Functor<Vector,A,A> make_functor(const std::vector<A>& f_a)
-{
-		return Functor<Vector,A,A>([](A&& a) { return std::forward<A>(a); }, f_a);
-}
 
 double sqrt(const int& a)
 {
 		return std::sqrt(a);
 }
 
-void test(std::vector<int>& l)
+void test(const std::vector<int>& l)
 {
-		auto r = make_functor(l)
-//			.fmap([](int x)
+		auto r = Vector::as_functor(l)
+//			.composite([](int x)
 //			{
 //				std::vector<int> v(x);
 //				std::iota(v.begin(), v.end(), 1);
-//				return make_functor(v);
+//				return v;
+//				return Vector::as_functor(v);
 //			})
 //			.mjoin()
-			.fmap(&sqrt)
-			.fmap([](const double& x)
+			.composite(&sqrt)
+			.composite([](double x)
 			{
-				return std::forward<std::string>(std::to_string(x));
+				return std::to_string(x);
 			})
-			.fmap([](const std::string& x)
+			.composite([](const std::string& x)
 			{
-				return std::forward<float>(std::stof(x)/2);
+				return std::stof(x)/2;
 			})
-			.get();
+			.yield();
 
 		std::for_each(r.begin(), r.end(), [](float s)
-		{
-			std::cout << s << std::endl;
-		});
+			{
+				std::cout << s << std::endl;
+			});
+
+//		std::for_each(r.begin(), r.end(), [](std::vector<int>& v)
+//		{
+//			std::for_each(v.begin(), v.end(), [](int s)
+//			{
+//				std::cout << s << " ";
+//			});
+//			std::cout << std::endl;
+//		});
 }
 
 int main()
 {
-		std::vector<int> l(5);
+		std::vector<int> l(10);
 		std::iota(l.begin(), l.end(), 1);
 		test(l);
 		return 0;
