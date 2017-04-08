@@ -49,8 +49,6 @@ struct Vector : public Collection<T>
 	using iterator_type = typename Collection<T>::iterator_type;
 	template <class A> Vector<A> operator()(A...) const;
 
-	virtual ~Vector() {}
-
 	Vector(std::initializer_list<T> list)
 	: vec(std::make_unique<T[]>(list.size())), vlen(list.size())
 	{
@@ -62,6 +60,12 @@ struct Vector : public Collection<T>
 	{
 		std::fill(begin(), end(), static_cast<T>(0));
 	}
+
+	Vector(const Vector& other) : vec(std::move(vec)), vlen(other.vlen)
+	{
+	}
+
+	virtual ~Vector() {}
 
 	virtual iterator_type begin() override
 	{
@@ -85,11 +89,11 @@ struct Vector : public Collection<T>
 
 	// fmap :: Functor f => (a -> b) -> f a -> f b
 	template <class B>
-	Vector<B>&& fmap(const std::function<B(T)>& mapper) const
+	Vector<B> fmap(const std::function<B(T)>& mapper) const
 	{
 		Vector<B> target(vlen);
 		std::transform(begin(), end(), target.begin(), mapper);
-		return std::forward<Vector<B>>(target);
+		return target;
 	}
 
 	std::unique_ptr<T[]> vec;

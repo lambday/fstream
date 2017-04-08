@@ -46,7 +46,7 @@ double sqrt(const int& a)
 
 void test(const Vector<int>& l)
 {
-	const auto& r = Functional::evaluate(l)
+	auto r = Functional::evaluate(l)
 //		.composite([](int x)
 //		{
 //			std::vector<int> v(x);
@@ -67,7 +67,7 @@ void test(const Vector<int>& l)
 
 		std::for_each(r.begin(), r.end(), [](float s)
 		{
-			std::cout << s << std::endl;
+			std::cout << "ahoy, " << s << std::endl;
 		});
 
 //		std::for_each(r.begin(), r.end(), [](std::vector<int>& v)

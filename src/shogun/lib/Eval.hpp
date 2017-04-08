@@ -71,9 +71,9 @@ struct Eval
 		return Eval<Functor,A,C>(composite_mapper, f_a);
 	}
 
-	typeof_f_of<B>&& yield() const
+	typeof_f_of<B> yield() const
 	{
-		return std::forward<typeof_f_of<B>>(f_a.fmap(mapper));
+		return f_a.fmap(mapper);
 	}
 
 	const std::function<B(A)> mapper;
