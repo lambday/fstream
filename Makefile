@@ -1,6 +1,7 @@
+flags=-O3 -std=c++14 -fno-omit-frame-pointer
 all:
 	mkdir -p build
-	g++ -O3 -std=c++14 tests/main.cpp -Isrc -o build/test
+	g++ $(flags) tests/main.cpp -Isrc -o build/test -lbenchmark -lpthread
 check:
 	build/test
 clean:

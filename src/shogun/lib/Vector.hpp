@@ -96,6 +96,17 @@ struct Vector : public Collection<T>
 		return target;
 	}
 
+	friend std::ostream& operator<<(std::ostream& os, Vector<T>& v)
+	{
+		os << "[";
+		std::for_each(v.begin(), v.end(), [&os](T val)
+		{
+			os << val << " ";
+		});
+		os << "]";
+		return os;
+	}
+
 	std::unique_ptr<T[]> vec;
 	size_t vlen;
 };

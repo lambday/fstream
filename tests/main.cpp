@@ -36,6 +36,7 @@
 #include <numeric>
 #include <cmath>
 #include <shogun/lib/Vector.hpp>
+#include <benchmark/benchmark.h>
 
 using namespace shogun;
 
@@ -44,31 +45,31 @@ double sqrt(const int& a)
 	return std::sqrt(a);
 }
 
-void test(const Vector<int>& l)
+Vector<double> test1(const Vector<int>& l)
 {
-	auto r = Functional::evaluate(l)
-//		.composite([](int x)
+	return Functional::evaluate(l)
+//		.map([](int x)
 //		{
 //			std::vector<int> v(x);
 //			std::iota(v.begin(), v.end(), 1);
 //			return Functional::as_functor(v);
 //		})
 //		.mjoin()
-		.composite(&sqrt)
-		.composite([](double x)
+		.map(&sqrt)
+		.map([](double x)
 		{
-			return std::to_string(x);
+			return std::log(x);
 		})
-		.composite([](const std::string& x)
+		.map([](double x)
 		{
-			return std::stof(x)/2;
+			return std::sin(x/2);
 		})
 		.yield();
 
-		std::for_each(r.begin(), r.end(), [](float s)
-		{
-			std::cout << "ahoy, " << s << std::endl;
-		});
+//		std::for_each(r.begin(), r.end(), [](float s)
+//		{
+//			std::cout << "ahoy, " << s << std::endl;
+//		});
 
 //		std::for_each(r.begin(), r.end(), [](std::vector<int>& v)
 //		{
@@ -80,10 +81,50 @@ void test(const Vector<int>& l)
 //		});
 }
 
-int main()
+Vector<double> __attribute__ ((noinline)) test2(const Vector<int>& l)
 {
-	Vector<int> l(10);
-	std::iota(l.begin(), l.end(), 1);
-	test(l);
-	return 0;
+	Vector<double> r(l.vlen);
+	std::transform(l.begin(), l.end(), r.begin(), [](int x)
+	{
+		return std::sin(std::log(sqrt(x))/2);
+	});
+	return r;
 }
+
+size_t size = 1000;
+
+static void functional(benchmark::State& state)
+{
+	Vector<int> l(size);
+	std::iota(l.begin(), l.end(), 1);
+	double c1 = 0;
+	while (state.KeepRunning())
+	{
+		auto r = test1(l);
+//		std::cout << r << std::endl;
+		c1 = sqrt(std::accumulate(r.begin(), r.end(), 0.0));
+//		break;
+	}
+//	std::cout << c1 << std::endl;
+}
+
+BENCHMARK(functional);
+
+static void normal(benchmark::State& state)
+{
+	Vector<int> l(size);
+	std::iota(l.begin(), l.end(), 1);
+	double c2 = 0;
+	while (state.KeepRunning())
+	{
+		auto r = test2(l);
+//		std::cout << r << std::endl;
+		c2 = sqrt(std::accumulate(r.begin(), r.end(), 0.0));
+//		break;
+	}
+//	std::cout << c2 << std::endl;
+}
+
+BENCHMARK(normal);
+
+BENCHMARK_MAIN();

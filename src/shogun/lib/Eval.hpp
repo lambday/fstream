@@ -50,23 +50,23 @@ struct Eval
 	{
 	}
 
-	template <class Map>
-	Eval<Functor,A,decltype((declval<Map>())(declval<B>()))> composite(const Map& map) const
+	template <class Mapper>
+	Eval<Functor,A,decltype((declval<Mapper>())(declval<B>()))> map(const Mapper& _mapper) const
 	{
-		using C = decltype((declval<Map>())(declval<B>()));
-		auto composite_mapper = [this, &map](const A& a)
+		using C = decltype((declval<Mapper>())(declval<B>()));
+		auto composite_mapper = [this, &_mapper](const A& a)
 		{
-			return std::forward<C>(map(std::forward<B>(mapper(a))));
+			return std::forward<C>(_mapper(std::forward<B>(mapper(a))));
 		};
 		return Eval<Functor,A,C>(composite_mapper, f_a);
 	}
 
 	template <class C>
-	Eval<Functor,A,C> composite(C(* const map)(const B&)) const
+	Eval<Functor,A,C> map(C(* const _mapper)(const B&)) const
 	{
-		auto composite_mapper = [this, &map](const A& a)
+		auto composite_mapper = [this, &_mapper](const A& a)
 		{
-			return std::forward<C>(map(std::forward<B>(mapper(a))));
+			return std::forward<C>(_mapper(std::forward<B>(mapper(a))));
 		};
 		return Eval<Functor,A,C>(composite_mapper, f_a);
 	}
