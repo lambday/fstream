@@ -47,7 +47,6 @@ template <class T>
 struct Vector : public Collection<T>
 {
 	using iterator_type = typename Collection<T>::iterator_type;
-	template <class A> Vector<A> operator()(A...) const;
 
 	Vector(std::initializer_list<T> list)
 	: vec(std::make_unique<T[]>(list.size())), vlen(list.size())
@@ -115,10 +114,10 @@ namespace Functional
 {
 
 template <class T>
-Eval<Vector<T>,T,T> evaluate(const Vector<T>& f_a)
+Eval<Vector,T,T> evaluate(const Vector<T>& f_a)
 {
 	auto identity_map = [](T&& a) { return std::forward<T>(a); };
-	return Eval<Vector<T>,T,T>(identity_map, f_a);
+	return Eval<Vector,T,T>(identity_map, f_a);
 }
 
 }

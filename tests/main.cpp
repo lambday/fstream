@@ -48,13 +48,12 @@ double sqrt(const int& a)
 Vector<double> test1(const Vector<int>& l)
 {
 	return Functional::evaluate(l)
-//		.map([](int x)
+//		.bind([](int x)
 //		{
-//			std::vector<int> v(x);
+//			Vector<int> v(x);
 //			std::iota(v.begin(), v.end(), 1);
-//			return Functional::as_functor(v);
+//			return v;
 //		})
-//		.mjoin()
 		.map(&sqrt)
 		.map([](double x)
 		{

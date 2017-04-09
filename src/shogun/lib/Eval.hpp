@@ -40,13 +40,10 @@ using std::declval;
 namespace shogun
 {
 
-template <class Functor, class A, class B>
+template <template <class> class Functor, class A, class B>
 struct Eval
 {
-	template <class T>
-	using typeof_f_of = decltype((declval<Functor>())(declval<T>()));
-
-	Eval(std::function<B(A)>&& map, const typeof_f_of<A>& _f_a) : mapper(map), f_a(_f_a)
+	Eval(std::function<B(A)>&& map, const Functor<A>& _f_a) : mapper(map), f_a(_f_a)
 	{
 	}
 
@@ -61,6 +58,13 @@ struct Eval
 		return Eval<Functor,A,C>(composite_mapper, f_a);
 	}
 
+//	template <class Mapper>
+//	auto bind(const Mapper& mapper) const
+//	{
+//		using NewFunctor = decltype((declval<Mapper>())(declval<B>()));
+//		//
+//	}
+
 	template <class C>
 	Eval<Functor,A,C> map(C(* const _mapper)(const B&)) const
 	{
@@ -71,34 +75,13 @@ struct Eval
 		return Eval<Functor,A,C>(composite_mapper, f_a);
 	}
 
-	typeof_f_of<B> yield() const
+	Functor<B> yield() const
 	{
 		return f_a.fmap(mapper);
 	}
 
 	const std::function<B(A)> mapper;
-	const typeof_f_of<A>& f_a;
-};
-
-template <class Monad, class A, class B>
-struct Eval<Monad, A, Eval<Monad, A, B>>
-{
-	template <class T>
-	using typeof_m_of = decltype((declval<Monad>())(declval<T>()));
-
-	Eval(std::function<Eval<Monad, A, B>(A)>&& map, const typeof_m_of<A>& _f_a)
-	: mapper(map), f_a(_f_a)
-	{
-	}
-
-//	Eval<Monad, A, B> mjoin() const
-//	{
-//		auto flattened_mapper = []() {};
-//		return Eval<Monad,A,B>(flattened_mapper, f_a);
-//	}
-
-	const std::function<Eval<Monad, A, B>(A)> mapper;
-	const typeof_m_of<A>& f_a;
+	const Functor<A>& f_a;
 };
 
 }
